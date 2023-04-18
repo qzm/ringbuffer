@@ -79,3 +79,6 @@ int main() {
 
 ## 许可证
 RingBuffer 使用 MIT 许可证，详情请参见 LICENSE 文件。
+
+## 感谢
+本程序部分使用ChatGPT，感谢OpenAI团队
