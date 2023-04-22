@@ -14,14 +14,16 @@
 template <typename T, size_t Capacity>
 class RingBuffer {
 public:
-    RingBuffer() : readIndex_(0), writeIndex_(0) {}
+    static_assert(Capacity > 0, "Capacity must be greater than 0.");
+
+    RingBuffer() noexcept : readIndex_(0), writeIndex_(0) {}
 
     /**
      * @brief Write data to the RingBuffer
      * @param value The data to be written
      * @return Whether the write operation is successful
      */
-    bool Write(const T& value) {
+    bool Write(const T& value) noexcept {
         const auto currentWrite = writeIndex_.load(std::memory_order_relaxed);
         const auto nextWrite = IncrementIndex(currentWrite);
         if (nextWrite == readIndex_.load(std::memory_order_acquire)) {
@@ -38,7 +40,7 @@ public:
      * @param value The read data
      * @return Whether the read operation is successful
      */
-    bool Read(T& value) {
+    bool Read(T& value) noexcept {
         const auto currentRead = readIndex_.load(std::memory_order_relaxed);
         if (currentRead == writeIndex_.load(std::memory_order_acquire)) {
             // RingBuffer is empty
@@ -55,7 +57,7 @@ private:
      * @param index The current index value
      * @return The incremented index value
      */
-    size_t IncrementIndex(size_t index) const {
+    size_t IncrementIndex(size_t index) const noexcept {
         assert(index < Capacity);
         return (index + 1) % Capacity;
     }
