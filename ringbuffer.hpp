@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <type_traits>
 
 template <typename T, size_t Capacity>
 class RingBuffer {
@@ -30,7 +31,7 @@ public:
             // RingBuffer is full
             return false;
         }
-        buffer_[currentWrite] = value;
+        new (&buffer_[currentWrite]) T(value);
         writeIndex_.store(nextWrite, std::memory_order_release);
         return true;
     }
@@ -42,11 +43,12 @@ public:
      */
     bool Read(T& value) noexcept {
         const auto currentRead = readIndex_.load(std::memory_order_relaxed);
-        if (currentRead == writeIndex_.load(std::memory_order_acquire)) {
+        if (currentRead == writeIndex_.load(std::memory_order_consume)) {
             // RingBuffer is empty
             return false;
         }
-        value = buffer_[currentRead];
+        value = std::move(*reinterpret_cast<T*>(&buffer_[currentRead]));
+        reinterpret_cast<T*>(&buffer_[currentRead])->~T();
         readIndex_.store(IncrementIndex(currentRead), std::memory_order_release);
         return true;
     }
@@ -58,12 +60,13 @@ private:
      * @return The incremented index value
      */
     size_t IncrementIndex(size_t index) const noexcept {
-        assert(index < Capacity);
-        return (index + 1) % Capacity;
+        static_assert(std::is_unsigned_v<decltype(index)>, "Index must be unsigned integer.");
+        static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be a power of 2.");
+        return (index + 1) & (Capacity - 1);
     }
 
 private:
-    alignas(64) T buffer_[Capacity]; // Buffer data
+    std::aligned_storage_t<sizeof(T), alignof(T)> buffer_[Capacity]; // Buffer data
     alignas(64) std::atomic<size_t> readIndex_; // Read index
     alignas(64) std::atomic<size_t> writeIndex_; // Write index
 };
