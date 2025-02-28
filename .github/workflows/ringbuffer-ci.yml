@@ -3,6 +3,8 @@ name: RingBuffer CI
 on:
   push:
     branches: [ "main" ]
+    tags:
+      - 'v*.*.*'
   pull_request:
     branches: [ "main" ]
 
@@ -94,3 +96,155 @@ jobs:
       run: |
         cd build
         ./test/example 
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential doxygen graphviz
+
+    - name: Create simplified CMakeLists.txt for release
+      run: |
+        cat > CMakeLists.txt << 'EOF'
+        cmake_minimum_required(VERSION 3.10)
+        project(RingBuffer VERSION 2.0.0 LANGUAGES CXX)
+
+        # 设置C++标准
+        set(CMAKE_CXX_STANDARD 17)
+        set(CMAKE_CXX_STANDARD_REQUIRED ON)
+        set(CMAKE_CXX_EXTENSIONS OFF)
+
+        # 设置构建类型，如果未指定则默认为Release
+        if(NOT CMAKE_BUILD_TYPE)
+          set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+        endif()
+        message(STATUS "构建类型: ${CMAKE_BUILD_TYPE}")
+
+        # 设置头文件路径
+        include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
+        # 启用测试
+        enable_testing()
+
+        # 添加测试子目录
+        add_subdirectory(test)
+
+        # 安装头文件
+        install(FILES ringbuffer.hpp DESTINATION include)
+
+        # 配置CPack
+        include(CPack)
+        set(CPACK_PACKAGE_NAME "ringbuffer")
+        set(CPACK_PACKAGE_VENDOR "Aaron Qiu")
+        set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "High-performance lock-free ring buffer implementation")
+        set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+        set(CPACK_PACKAGE_INSTALL_DIRECTORY "ringbuffer")
+        set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+        set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+        set(CPACK_GENERATOR "TGZ;ZIP")
+        EOF
+
+        cat > test/CMakeLists.txt << 'EOF'
+        # 测试程序的CMake配置
+
+        # 添加测试可执行文件
+        add_executable(example example.cpp)
+        add_executable(benchmark benchmark.cpp)
+
+        # 设置包含目录
+        target_include_directories(example PRIVATE ${CMAKE_SOURCE_DIR})
+        target_include_directories(benchmark PRIVATE ${CMAKE_SOURCE_DIR})
+
+        # 链接线程库
+        find_package(Threads REQUIRED)
+        target_link_libraries(example PRIVATE Threads::Threads)
+        target_link_libraries(benchmark PRIVATE Threads::Threads)
+
+        # 添加测试
+        add_test(NAME example_test COMMAND example)
+        add_test(NAME benchmark_test COMMAND benchmark)
+        EOF
+    
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake ..
+    
+    - name: Build
+      run: |
+        cd build
+        cmake --build .
+    
+    - name: Create packages
+      run: |
+        cd build
+        cpack -G "TGZ;ZIP"
+    
+    - name: Generate documentation
+      run: |
+        mkdir -p docs
+        doxygen -g Doxyfile
+        sed -i 's/PROJECT_NAME           = "My Project"/PROJECT_NAME           = "RingBuffer"/' Doxyfile
+        sed -i 's/PROJECT_BRIEF          =/PROJECT_BRIEF          = "High-performance lock-free ring buffer implementation"/' Doxyfile
+        sed -i 's/OUTPUT_DIRECTORY       =/OUTPUT_DIRECTORY       = docs/' Doxyfile
+        sed -i 's/EXTRACT_ALL            = NO/EXTRACT_ALL            = YES/' Doxyfile
+        sed -i 's/EXTRACT_PRIVATE        = NO/EXTRACT_PRIVATE        = YES/' Doxyfile
+        sed -i 's/EXTRACT_STATIC         = NO/EXTRACT_STATIC         = YES/' Doxyfile
+        sed -i 's/HAVE_DOT               = NO/HAVE_DOT               = YES/' Doxyfile
+        sed -i 's/UML_LOOK               = NO/UML_LOOK               = YES/' Doxyfile
+        sed -i 's/RECURSIVE              = NO/RECURSIVE              = YES/' Doxyfile
+        doxygen Doxyfile
+        tar -czf docs.tar.gz docs
+    
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: RingBuffer ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+        files: |
+          build/*.tar.gz
+          build/*.zip
+          docs.tar.gz
+          ringbuffer.hpp
+          LICENSE
+          README.md
+        body: |
+          # RingBuffer ${{ github.ref_name }}
+          
+          高性能无锁环形缓冲区实现
+          
+          ## 包含内容
+          
+          - 头文件库 (ringbuffer.hpp)
+          - 示例程序
+          - 基准测试程序
+          - API文档
+          
+          ## 安装
+          
+          这是一个仅头文件的库，只需包含 `ringbuffer.hpp` 即可使用。
+          
+          ```cpp
+          #include "ringbuffer.hpp"
+          ```
+    
+    - name: Publish to GitHub Packages
+      uses: actions/upload-artifact@v3
+      with:
+        name: ringbuffer-package
+        path: |
+          build/*.tar.gz
+          build/*.zip 

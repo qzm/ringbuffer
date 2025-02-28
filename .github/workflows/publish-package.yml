@@ -1,0 +1,112 @@
+name: Publish Package
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential
+    
+    - name: Create package.json for npm
+      run: |
+        cat > package.json << 'EOF'
+        {
+          "name": "@${{ github.repository_owner }}/ringbuffer",
+          "version": "${{ github.event.release.tag_name }}",
+          "description": "High-performance lock-free ring buffer implementation",
+          "repository": {
+            "type": "git",
+            "url": "git+https://github.com/${{ github.repository }}.git"
+          },
+          "keywords": [
+            "ringbuffer",
+            "circular-buffer",
+            "lock-free",
+            "high-performance",
+            "c++"
+          ],
+          "author": "Aaron Qiu",
+          "license": "MIT",
+          "bugs": {
+            "url": "https://github.com/${{ github.repository }}/issues"
+          },
+          "homepage": "https://github.com/${{ github.repository }}#readme",
+          "files": [
+            "ringbuffer.hpp",
+            "README.md",
+            "LICENSE"
+          ]
+        }
+        EOF
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16.x'
+        registry-url: 'https://npm.pkg.github.com'
+        scope: '@${{ github.repository_owner }}'
+    
+    - name: Publish to GitHub Packages (npm)
+      run: npm publish
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Create simplified CMakeLists.txt for package
+      run: |
+        cat > CMakeLists.txt << 'EOF'
+        cmake_minimum_required(VERSION 3.10)
+        project(RingBuffer VERSION 2.0.0 LANGUAGES CXX)
+
+        # 设置C++标准
+        set(CMAKE_CXX_STANDARD 17)
+        set(CMAKE_CXX_STANDARD_REQUIRED ON)
+        set(CMAKE_CXX_EXTENSIONS OFF)
+
+        # 设置构建类型，如果未指定则默认为Release
+        if(NOT CMAKE_BUILD_TYPE)
+          set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+        endif()
+        message(STATUS "构建类型: ${CMAKE_BUILD_TYPE}")
+
+        # 设置头文件路径
+        include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
+        # 配置CPack
+        include(CPack)
+        set(CPACK_PACKAGE_NAME "ringbuffer")
+        set(CPACK_PACKAGE_VENDOR "Aaron Qiu")
+        set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "High-performance lock-free ring buffer implementation")
+        set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+        set(CPACK_PACKAGE_INSTALL_DIRECTORY "ringbuffer")
+        set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+        set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+        set(CPACK_GENERATOR "TGZ;ZIP")
+
+        # 安装头文件
+        install(FILES ringbuffer.hpp DESTINATION include)
+        EOF
+    
+    - name: Create CMake package
+      run: |
+        mkdir -p build
+        cd build
+        cmake ..
+        cpack -G "TGZ;ZIP"
+    
+    - name: Upload CMake package
+      uses: actions/upload-artifact@v3
+      with:
+        name: cmake-packages
+        path: build/*.tar.gz 
