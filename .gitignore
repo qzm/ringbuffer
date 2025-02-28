@@ -1,0 +1,34 @@
+# CMake构建目录
+build/
+build_pgo/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# 编译生成的文件
+*.o
+*.obj
+*.exe
+*.out
+*.a
+*.so
+*.dll
+*.lib
+*.dylib
+
+# 测试生成的文件
+Testing/
+CTestTestfile.cmake
+
+# IDE生成的文件
+.vscode/
+.idea/
+*.swp
+*~
+
+# 操作系统生成的文件
+.DS_Store
+Thumbs.db 
