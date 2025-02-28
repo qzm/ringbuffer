@@ -1,4 +1,4 @@
-name: C/C++ CI
+name: RingBuffer CI
 
 on:
   push:
@@ -8,16 +8,80 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
+    
     steps:
     - uses: actions/checkout@v4
-    - name: configure
-      run: ./configure
-    - name: make
-      run: make
-    - name: make check
-      run: make check
-    - name: make distcheck
-      run: make distcheck
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential
+    
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake ..
+    
+    - name: Build
+      run: |
+        cd build
+        cmake --build .
+    
+    - name: Run tests
+      run: |
+        cd build
+        ctest -V
+    
+    - name: Run benchmark
+      run: |
+        cd build
+        ./test/benchmark
+    
+    - name: Run example
+      run: |
+        cd build
+        ./test/example
+    
+  build_with_pgo:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential
+    
+    - name: Configure CMake with PGO (Generate)
+      run: |
+        mkdir -p build_pgo
+        cd build_pgo
+        cmake -DUSE_PGO=ON -DPGO_GENERATE=ON -DPGO_USE=OFF ..
+    
+    - name: Build with PGO (Generate)
+      run: |
+        cd build_pgo
+        cmake --build .
+    
+    - name: Run benchmark to generate profile
+      run: |
+        cd build_pgo
+        ./test/benchmark
+    
+    - name: Configure CMake with PGO (Use)
+      run: |
+        cd build_pgo
+        cmake -DUSE_PGO=ON -DPGO_GENERATE=OFF -DPGO_USE=ON ..
+    
+    - name: Build with PGO (Use)
+      run: |
+        cd build_pgo
+        cmake --build .
+    
+    - name: Run optimized benchmark
+      run: |
+        cd build_pgo
+        ./test/benchmark
