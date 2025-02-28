@@ -106,7 +106,7 @@ jobs:
         cpack -G "TGZ;ZIP"
     
     - name: Upload CMake package
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: cmake-packages
         path: build/*.tar.gz 
