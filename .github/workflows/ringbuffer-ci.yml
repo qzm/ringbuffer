@@ -1,0 +1,96 @@
+name: RingBuffer CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential
+    
+    - name: Create simplified CMakeLists.txt for CI
+      run: |
+        cat > CMakeLists.txt << 'EOF'
+        cmake_minimum_required(VERSION 3.10)
+        project(RingBuffer VERSION 2.0.0 LANGUAGES CXX)
+
+        # 设置C++标准
+        set(CMAKE_CXX_STANDARD 17)
+        set(CMAKE_CXX_STANDARD_REQUIRED ON)
+        set(CMAKE_CXX_EXTENSIONS OFF)
+
+        # 设置构建类型，如果未指定则默认为Release
+        if(NOT CMAKE_BUILD_TYPE)
+          set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+        endif()
+        message(STATUS "构建类型: ${CMAKE_BUILD_TYPE}")
+
+        # 设置头文件路径
+        include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
+        # 启用测试
+        enable_testing()
+
+        # 添加测试子目录
+        add_subdirectory(test)
+
+        # 安装头文件
+        install(FILES ringbuffer.hpp DESTINATION include)
+        EOF
+
+        cat > test/CMakeLists.txt << 'EOF'
+        # 测试程序的CMake配置
+
+        # 添加测试可执行文件
+        add_executable(example example.cpp)
+        add_executable(benchmark benchmark.cpp)
+
+        # 设置包含目录
+        target_include_directories(example PRIVATE ${CMAKE_SOURCE_DIR})
+        target_include_directories(benchmark PRIVATE ${CMAKE_SOURCE_DIR})
+
+        # 链接线程库
+        find_package(Threads REQUIRED)
+        target_link_libraries(example PRIVATE Threads::Threads)
+        target_link_libraries(benchmark PRIVATE Threads::Threads)
+
+        # 添加测试
+        add_test(NAME example_test COMMAND example)
+        add_test(NAME benchmark_test COMMAND benchmark)
+        EOF
+    
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake ..
+    
+    - name: Build
+      run: |
+        cd build
+        cmake --build .
+    
+    - name: Run tests
+      run: |
+        cd build
+        ctest -V
+    
+    - name: Run benchmark
+      run: |
+        cd build
+        ./test/benchmark
+    
+    - name: Run example
+      run: |
+        cd build
+        ./test/example 
